@@ -553,7 +553,7 @@ function renderFrameEntry(){
   fe.innerHTML += framePadHtml();
   // イベント設定: inputではなくchange(確定時)に反応させ、「1」と「10」を区別できるようにする
   fe.querySelectorAll("input[data-g]").forEach(inp=>{
-    inp.addEventListener("change", onFrameInput);
+    inp.addEventListener("input", onFrameInput);
   });
 }
 
@@ -710,6 +710,10 @@ function onFrameInput(e){
   g.frames[f][t] = v===null? undefined : v;
   // 1-9Fでストライクなら2投目を消す
   if(f<9 && t===0 && v===10){ g.frames[f][1] = undefined; }
+  // 「1」の直後に「0」で「10」を作れるよう、値が1桁で「1」のときは次へ進まない
+  // (inputイベントで逐次反応するための誤移動防止)
+  const raw = inp.value;
+  const holdAdvance = (raw === "1");  // 「10」を打つ途中かもしれないので待つ
   // 再描画(フォーカス保持のため部分更新: マークとステータスのみ)
   const card = inp.closest(".venue-card");
   const calc = calcGame(g.frames);
@@ -742,7 +746,7 @@ function onFrameInput(e){
     errEl.textContent = err;
   }else if(errEl){ errEl.remove(); }
   // 自動で次の入力欄へ(値が入った時のみ)
-  if(v!==null) focusNextFrameInput(gi, f, t, g);
+  if(v!==null && !holdAdvance) focusNextFrameInput(gi, f, t, g);
 }
 
 // 次に入力すべきマスへフォーカスを移す
