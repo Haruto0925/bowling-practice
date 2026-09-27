@@ -141,6 +141,16 @@
   .frame-marks{display:flex;gap:3px;overflow-x:auto;padding:0 0 2px}
   .fr-mark{flex:0 0 auto;width:52px;text-align:center;font-size:12px;font-weight:700;color:var(--primary);min-height:16px}
   .fr-box.fr10 + .fr-mark, .frame-marks .fr-mark:last-child{width:72px}
+  /* かんたん入力パッド */
+  .frame-pad{margin-top:10px;background:var(--stripe);border-radius:12px;padding:10px}
+  .frame-pad-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .fp-btn{border:none;border-radius:12px;padding:10px 4px;font-size:20px;font-weight:800;line-height:1.1;cursor:pointer;min-height:56px;color:#fff}
+  .fp-btn span{font-size:10px;font-weight:600;display:block;margin-top:2px}
+  .fp-g{background:#6b7280}
+  .fp-s{background:var(--success)}
+  .fp-x{background:var(--accent)}
+  .fp-c{background:#9ca3af}
+  .fp-btn:active{transform:scale(.96)}
 </style>
 </head>
 <body>
@@ -539,10 +549,61 @@ function renderFrameEntry(){
   fe.innerHTML = frameGames.map((g,gi)=>frameGameHtml(g,gi)).join("") +
     (frameGames.length<5
       ? `<button class="btn gray sm" onclick="addFrameGame()">＋ ゲームを追加(フレーム入力)</button>` : "");
-  // イベント設定
+  // ボタンパッドを最下部に追加
+  fe.innerHTML += framePadHtml();
+  // イベント設定: inputではなくchange(確定時)に反応させ、「1」と「10」を区別できるようにする
   fe.querySelectorAll("input[data-g]").forEach(inp=>{
-    inp.addEventListener("input", onFrameInput);
+    inp.addEventListener("change", onFrameInput);
   });
+}
+
+// ガーター/スペア/ストライクの専用ボタンパッド
+// 現在フォーカス中(または最後に触った)入力欄に値を入れる
+let lastFrameTarget = null; // {gi, f, t}
+function framePadHtml(){
+  return `<div class="frame-pad">
+    <div class="small" style="margin-bottom:4px">かんたん入力(入力欄を選んでから押す):</div>
+    <div class="frame-pad-btns">
+      <button type="button" class="fp-btn fp-g" onclick="padPress(0)">G<br><span>ガーター</span></button>
+      <button type="button" class="fp-btn fp-s" onclick="padPress('spare')">/<br><span>スペア</span></button>
+      <button type="button" class="fp-btn fp-x" onclick="padPress(10)">X<br><span>ストライク</span></button>
+      <button type="button" class="fp-btn fp-c" onclick="padPress('clear')">C<br><span>クリア</span></button>
+    </div>
+  </div>`;
+}
+function padPress(kind){
+  // フォーカス中の入力欄、なければ最後に触った欄、それもなければ最初の空き欄
+  let target = document.activeElement;
+  if(!(target && target.dataset && target.dataset.g!==undefined)){
+    target = lastFrameTarget ? document.querySelector(`input[data-g="${lastFrameTarget.gi}"][data-f="${lastFrameTarget.f}"][data-t="${lastFrameTarget.t}"]`) : null;
+  }
+  if(!target){
+    target = document.querySelector('#frame-entry input[data-g]:not([disabled])');
+  }
+  if(!target) return;
+  const gi = Number(target.dataset.g), f = Number(target.dataset.f), t = Number(target.dataset.t);
+  const g = frameGames[gi];
+  const fr = g.frames[f];
+  const has = i => fr[i]!==undefined && fr[i]!==null;
+  if(kind==="clear"){
+    target.value = "";
+    fr[t] = undefined;
+  }else if(kind===0){ // ガーター
+    target.value = "0";
+    fr[t] = 0;
+  }else if(kind===10){ // ストライク(1投目のみ)
+    if(t===0){ target.value = "10"; fr[0]=10; if(f<9) fr[1]=undefined; }
+    else { target.value = "10"; fr[t]=10; }
+  }else if(kind==="spare"){ // スペア(2投目以降): 残りピンを自動計算
+    if(t>=1 && has(t-1)){
+      const rest = 10 - fr[t-1];
+      target.value = String(rest);
+      fr[t] = rest;
+    }else{ return; }
+  }
+  lastFrameTarget = {gi,f,t};
+  // change と同じ後処理を呼ぶ
+  onFrameInput({target});
 }
 
 function frameGameHtml(g, gi){
@@ -644,6 +705,7 @@ function onFrameInput(e){
   const gi = Number(inp.dataset.g), f = Number(inp.dataset.f), t = Number(inp.dataset.t);
   let v = inp.value===""? null : Math.round(Number(inp.value));
   if(v!==null){ v = Math.max(0, Math.min(10, v)); }
+  lastFrameTarget = {gi,f,t};
   const g = frameGames[gi];
   g.frames[f][t] = v===null? undefined : v;
   // 1-9Fでストライクなら2投目を消す
