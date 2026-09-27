@@ -151,6 +151,9 @@
   .fp-x{background:var(--accent)}
   .fp-c{background:#9ca3af}
   .fp-btn:active{transform:scale(.96)}
+  /* モーダル(会場情報編集) */
+  .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal{background:#fff;border-radius:16px;padding:18px;width:100%;max-width:440px;max-height:85vh;overflow:auto}
 </style>
 </head>
 <body>
@@ -445,9 +448,31 @@ function viewHome(){
       </li>`).join("")}
     </ul>
   </div>`:""}
+  ${couponAlertHtml()}
   <div class="card">
     <h2>🕒 最近の記録</h2>
     ${recentHtml}
+  </div>`;
+}
+
+// 期限間近・期限切れクーポンのお知らせカード
+function couponAlertHtml(){
+  const coupons = collectCoupons().filter(c=>c.status!=="ok");
+  if(!coupons.length) return "";
+  return `<div class="card" style="border-left:5px solid var(--danger)">
+    <h2 style="color:var(--danger);border-left-color:var(--danger)">🎟️ クーポンの期限が近い!</h2>
+    <ul class="list">
+      ${coupons.map(c=>{
+        const badge = c.status==="expired"
+          ? `<span class="tag" style="background:#fce8e6;color:var(--danger)">期限切れ</span>`
+          : `<span class="tag" style="background:#fff4e6;color:#c2410c">あと${Math.round((new Date(c.exp)-new Date(todayStr()))/86400000)}日</span>`;
+        return `<li><div class="grow">
+          <div><b>${esc(c.text)}</b> ${badge}</div>
+          <div class="small">📍${esc(c.venue)} ・ 期限: ${esc(c.exp||"なし")}</div>
+        </div></li>`;
+      }).join("")}
+    </ul>
+    <div class="small" style="margin-top:6px">使い忘れに注意! 詳しくは「⚙️ かんり → 会場の情報」で確認・更新できます。</div>
   </div>`;
 }
 
@@ -1136,11 +1161,17 @@ function viewAdmin(){
     <ul class="list" style="margin-top:8px">
       ${venues.length?venues.map(v=>{
         const n = allGames().filter(g=>g.venueId===v.id).length;
-        return `<li><div class="grow"><b>${esc(v.name)}</b> <span class="small">(${n}G)</span></div>
+        const coupons = (v.coupons||[]).length;
+        return `<li><div class="grow"><b>${esc(v.name)}</b> <span class="small">(${n}G)</span>
+          ${v.price?`<div class="small">💴 ${esc(v.price)}</div>`:""}
+          ${coupons?`<div class="small">🎟️ クーポン${coupons}件</div>`:""}
+        </div>
+          <button class="btn sm" style="background:var(--lane)" onclick="editVenueInfo('${v.id}')">情報</button>
           <button class="btn gray sm" onclick="renameVenue('${v.id}')">改名</button>
           <button class="btn danger sm" onclick="delVenue('${v.id}')">削除</button></li>`;
       }).join(""):`<div class="empty">まだ会場がありません。記録時の「＋会場」からも追加できます。</div>`}
     </ul>
+    <div class="small" style="margin-top:6px">「情報」ボタンで料金・クーポン・メモを登録できます。全員に共有されます。</div>
   </div>
   <div class="card">
     <h2>💾 データ</h2>
@@ -1161,6 +1192,75 @@ function viewAdmin(){
         : "📱 ローカルモード: データはこの端末のブラウザ内に保存されます。firebase-config.js を設定すると共有モードに切り替わります。"}
     </div>
   </div>`;
+}
+
+// ==================== 会場の詳細情報(料金・クーポン) ====================
+function editVenueInfo(id){
+  const v = DB.data.venues.find(x=>x.id===id);
+  if(!v) return;
+  const coupons = v.coupons||[];
+  document.getElementById("app").insertAdjacentHTML("beforeend", `
+    <div class="modal-back" id="venue-modal" onclick="if(event.target===this)this.remove()">
+      <div class="modal">
+        <h2 style="margin-bottom:12px">📍 ${esc(v.name)}</h2>
+        <label>料金(例: 1G 600円・貸靴 350円)</label>
+        <input type="text" id="vi-price" value="${esc(v.price||"")}" placeholder="例: 平日1G 600円 / 貸靴 350円">
+        <div style="margin-top:10px"><label>メモ(アクセス・駐車場・予約方法など)</label>
+        <textarea id="vi-memo" rows="2" placeholder="例: 駅徒歩5分、大型駐車場あり">${esc(v.memo||"")}</textarea></div>
+        <h3 style="margin-top:12px">🎟️ クーポン</h3>
+        <div id="vi-coupons">
+          ${coupons.map((c,i)=>couponRowHtml(c,i)).join("")}
+        </div>
+        <button class="btn gray sm" onclick="addCouponRow()">＋ クーポンを追加</button>
+        <div class="divider"></div>
+        <div class="grid2">
+          <button class="btn gray" onclick="document.getElementById('venue-modal').remove()">キャンセル</button>
+          <button class="btn accent" onclick="saveVenueInfo('${id}')">保存</button>
+        </div>
+      </div>
+    </div>`);
+}
+function couponRowHtml(c,i){
+  return `<div class="row" style="margin-bottom:6px" data-ci="${i}">
+    <input type="text" class="cp-text" placeholder="内容(例: 1G無料)" value="${esc(c.text||"")}" style="flex:1.4">
+    <input type="date" class="cp-exp" value="${esc(c.exp||"")}" style="flex:1">
+    <button class="rm" type="button" onclick="this.closest('.row').remove()" style="flex:0 0 auto;border:none;background:#f3f4f6;color:var(--danger);border-radius:8px;width:36px;height:36px;cursor:pointer">✕</button>
+  </div>`;
+}
+function addCouponRow(){
+  document.getElementById("vi-coupons").insertAdjacentHTML("beforeend", couponRowHtml({},Date.now()));
+}
+async function saveVenueInfo(id){
+  const price = document.getElementById("vi-price").value.trim();
+  const memo = document.getElementById("vi-memo").value.trim();
+  const coupons = [...document.querySelectorAll("#vi-coupons .row")].map(r=>({
+    text: r.querySelector(".cp-text").value.trim(),
+    exp: r.querySelector(".cp-exp").value
+  })).filter(c=>c.text);
+  await fsSet("venues", id, {price, memo, coupons});
+  document.getElementById("venue-modal").remove();
+  render();
+}
+
+// 期限の近い/切れたクーポンを集める(全体会場)
+function collectCoupons(){
+  const out = [];
+  const today = todayStr();
+  for(const v of DB.data.venues){
+    for(const c of (v.coupons||[])){
+      let status = "ok";
+      if(c.exp){
+        const diff = Math.round((new Date(c.exp) - new Date(today)) / 86400000);
+        if(diff < 0) status = "expired";
+        else if(diff <= 14) status = "soon";
+      }
+      out.push({venue: v.name, text: c.text, exp: c.exp, status});
+    }
+  }
+  // 期限切れ→期限近い→その他 の順
+  const rank = {expired:0, soon:1, ok:2};
+  out.sort((a,b)=> rank[a.status]-rank[b.status] || (a.exp||"9999").localeCompare(b.exp||"9999"));
+  return out;
 }
 
 async function addMember(){
