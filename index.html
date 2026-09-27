@@ -649,7 +649,6 @@ function onFrameInput(e){
   // 1-9Fでストライクなら2投目を消す
   if(f<9 && t===0 && v===10){ g.frames[f][1] = undefined; }
   // 再描画(フォーカス保持のため部分更新: マークとステータスのみ)
-  const gi2 = gi;
   const card = inp.closest(".venue-card");
   const calc = calcGame(g.frames);
   // マーク更新
@@ -680,6 +679,45 @@ function onFrameInput(e){
     if(!errEl){ errEl = document.createElement("div"); errEl.className="frame-err small"; errEl.style.cssText="color:var(--danger);margin-top:4px"; card.appendChild(errEl); }
     errEl.textContent = err;
   }else if(errEl){ errEl.remove(); }
+  // 自動で次の入力欄へ(値が入った時のみ)
+  if(v!==null) focusNextFrameInput(gi, f, t, g);
+}
+
+// 次に入力すべきマスへフォーカスを移す
+function focusNextFrameInput(gi, f, t, g){
+  const fr = g.frames[f];
+  const has = i => fr[i]!==undefined && fr[i]!==null;
+  let next = null;
+  if(f < 9){
+    if(t===0){
+      if(fr[0]===10){ next = {f:f+1, t:0}; }        // ストライク → 次フレーム1投目
+      else { next = {f:f, t:1}; }                    // → 2投目
+    } else { next = {f:f+1, t:0}; }                  // 2投目 → 次フレーム1投目
+  }else{ // 10F
+    if(t===0){ next = {f:f, t:1}; }
+    else if(t===1){
+      const canThird = fr[0]===10 || (has(0)&&has(1)&&fr[0]+fr[1]===10);
+      next = canThird ? {f:f, t:2} : null;           // ボーナスなければ終了
+    }
+    else next = null;                                 // 3投目 → 終了
+  }
+  if(next && next.f<=9){
+    const sel = `input[data-g="${gi}"][data-f="${next.f}"][data-t="${next.t}"]`;
+    const el = document.querySelector(sel);
+    if(el && !el.disabled){
+      // iOSでキーボードが閉じないよう少し遅延
+      setTimeout(()=>{ el.focus(); el.select && el.select(); }, 50);
+      return;
+    }
+  }
+  // ゲーム完了時はキーボードを閉じる
+  if(!next && f===9){
+    const calc2 = calcGame(g.frames);
+    if(calc2.complete){
+      const inp = document.activeElement;
+      if(inp && inp.blur) inp.blur();
+    }
+  }
 }
 
 function addFrameGame(){
@@ -755,7 +793,11 @@ async function saveSession(){
       strikes: c.calc.strikes,
       spares: c.calc.spares,
       opens: c.calc.opens,
-      frames: c.frames.map(fr=>fr.map(p=>p===undefined?null:p))
+      // Firestoreはネストした配列を保存できないため、文字列に変換 (例: "10,-,-|9,0")
+      framesStr: c.frames.map(fr=>{
+        const arr = [fr[0], fr[1], fr[2]].map(p=> (p===undefined||p===null)? "-" : String(p));
+        return arr.join(",");
+      }).join("|")
     }));
   }
   try{
@@ -763,8 +805,9 @@ async function saveSession(){
     if(gamesDetail) doc.gamesDetail = gamesDetail;
     await fsAdd("sessions", doc);
   }catch(e){
-    console.error(e);
-    alert("保存に失敗しました。ネット接続とFirebase設定を確認してください。");
+    console.error("save error:", e);
+    const msg = (e && e.code) ? `${e.code}: ${e.message||""}` : String(e);
+    alert("保存に失敗しました。\n原因: " + msg.slice(0,200) + "\n\nこの画面をスクショして報告してください。");
     return;
   }
   gameCount = 3;
