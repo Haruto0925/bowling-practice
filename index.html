@@ -129,6 +129,18 @@
   .filter-row button.on{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:700}
   .divider{height:1px;background:var(--border);margin:14px 0}
   svg text{font-family:inherit}
+  /* フレーム入力 */
+  .frame-strip{display:flex;gap:3px;overflow-x:auto;padding:4px 0 2px}
+  .fr-box{flex:0 0 auto;width:52px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#fff}
+  .fr-box.fr10{width:72px}
+  .fr-no{background:var(--stripe);font-size:10px;font-weight:700;color:var(--sub);text-align:center;padding:2px 0}
+  .fr-inputs{display:flex}
+  .fr-inputs input{flex:1;min-width:0;border:none;border-left:1px solid var(--border);border-radius:0;padding:8px 2px;font-size:15px;text-align:center}
+  .fr-inputs input:first-child{border-left:none}
+  .fr-inputs input:disabled{background:#f3f4f6;color:#d1d5db}
+  .frame-marks{display:flex;gap:3px;overflow-x:auto;padding:0 0 2px}
+  .fr-mark{flex:0 0 auto;width:52px;text-align:center;font-size:12px;font-weight:700;color:var(--primary);min-height:16px}
+  .fr-box.fr10 + .fr-mark, .frame-marks .fr-mark:last-child{width:72px}
 </style>
 </head>
 <body>
@@ -147,6 +159,61 @@
 
 <script>
 "use strict";
+// ---------- ボウリング スコア計算(正規ルール) ----------
+// frames: 10フレームの配列。1-9Fは [t1, t2?]、10Fは [t1, t2?, t3?]。未入力は undefined/null
+function calcGame(frames){
+  const throws = [];
+  let complete = true;
+  for(let f=0; f<10; f++){
+    const fr = frames[f] || [];
+    const validFr = fr.filter(p=>p!==null && p!==undefined);
+    const need = f<9 ? (validFr[0]===10 ? 1 : 2) : ((validFr[0]===10 || (validFr.length>=2 && validFr[0]+validFr[1]===10)) ? 3 : 2);
+    if(validFr.length < need) complete = false;
+    for(const p of fr){
+      if(p===null || p===undefined) continue;
+      throws.push({pins:p, frame:f});
+    }
+  }
+  let score = 0;
+  const cum = [];
+  let strikes=0, spares=0, opens=0;
+  for(let f=0; f<10; f++){
+    const fr = frames[f] || [];
+    const valid = fr.filter(p=>p!==null && p!==undefined);
+    if(valid.length===0){ cum.push(null); continue; }
+    if(f<9){
+      if(valid[0]===10){
+        strikes++;
+        const bonus = throws.filter(t=>t.frame>f).slice(0,2);
+        const need2 = bonus.length>=2;
+        score += 10 + (need2? bonus.reduce((a,t)=>a+t.pins,0) : 0);
+        cum.push(need2? score : null);
+      }else{
+        const sum = valid.slice(0,2).reduce((a,p)=>a+p,0);
+        if(valid.length>=2 && sum===10){
+          spares++;
+          const bonus = throws.filter(t=>t.frame>f).slice(0,1);
+          score += 10 + (bonus.length? bonus[0].pins : 0);
+          cum.push(bonus.length? score : null);
+        }else if(valid.length>=2){
+          opens++;
+          score += sum;
+          cum.push(score);
+        }else{
+          cum.push(null);
+        }
+      }
+    }else{
+      if(valid[0]===10) strikes++;
+      else if(valid.length>=2 && valid[0]+valid[1]===10) spares++;
+      else if(valid.length>=2) opens++;
+      score += valid.reduce((a,p)=>a+p,0);
+      cum.push(score);
+    }
+  }
+  return {total: cum[cum.length-1] ?? 0, cum, complete, strikes, spares, opens};
+}
+
 // ---------- ユーティリティ ----------
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -399,9 +466,20 @@ function viewRecord(){
         <button class="btn ghost sm" style="flex:0 0 auto" onclick="quickAddVenue()">＋会場</button>
       </div>
     </div>
-    <label>スコア(0〜300)</label>
-    <div id="game-rows"></div>
-    <button class="btn gray sm" onclick="addGameRow()" ${DB.data.members.length===0?"disabled":""}>＋ ゲームを追加</button>
+    <div style="margin-bottom:8px">
+      <label>入力方式</label>
+      <div class="filter-row" style="margin-bottom:0">
+        <button type="button" id="mode-score" class="on" onclick="setInputMode('score')">🔢 合計スコアのみ</button>
+        <button type="button" id="mode-frames" onclick="setInputMode('frames')">🎯 フレームごと(ストライク・スペア集計)</button>
+      </div>
+      <div class="small" style="margin-top:4px">ストライク率・スペア率を集計するには「フレームごと」で記録してください。スコアは自動計算されます。<br>フレーム入力欄は<strong>横にスワイプ</strong>すると10フレーム目まで入力できます。ストライクは1投目に「10」と入れるだけでOKです。</div>
+    </div>
+    <div id="score-entry">
+      <label>スコア(0〜300)</label>
+      <div id="game-rows"></div>
+      <button class="btn gray sm" onclick="addGameRow()" ${DB.data.members.length===0?"disabled":""}>＋ ゲームを追加</button>
+    </div>
+    <div id="frame-entry" class="hidden"></div>
     <div style="margin-top:10px"><label>メモ(任意)</label><input type="text" id="r-memo" placeholder="例: オイル多め、スペア好調 など"></div>
     <div style="margin-top:12px"><button class="btn accent" onclick="saveSession()" ${DB.data.members.length===0?"disabled":""}>💾 この記録を保存</button></div>
     ${Sync.mode==="cloud"?'<div class="small center" style="margin-top:6px">☁️ 保存すると全員の端末にすぐ反映されます</div>':""}
@@ -424,9 +502,194 @@ function viewRecord(){
 }
 
 function initGameRows(){
+  setInputMode(inputMode, true);
   const wrap = $("#game-rows");
   wrap.innerHTML = "";
   for(let i=0;i<gameCount;i++) addGameRow(true);
+  initFrameEntry();
+}
+
+// ---------- 入力方式: 合計スコア / フレームごと ----------
+let inputMode = "score"; // 'score' | 'frames'
+let frameGames = [];     // [{frames: [[t1,t2],...10frames], score, complete}]
+let frameGameCount = 1;
+
+function setInputMode(mode, keep){
+  inputMode = mode;
+  const s = $("#mode-score"), f = $("#mode-frames");
+  if(s) s.classList.toggle("on", mode==="score");
+  if(f) f.classList.toggle("on", mode==="frames");
+  const se = $("#score-entry"), fe = $("#frame-entry");
+  if(se) se.classList.toggle("hidden", mode!=="score");
+  if(fe) fe.classList.toggle("hidden", mode!=="frames");
+  if(mode==="frames" && !keep) renderFrameEntry();
+}
+
+function initFrameEntry(){
+  if(!frameGames.length) frameGames = [newFrameGame()];
+  renderFrameEntry();
+}
+function newFrameGame(){
+  return {frames: Array.from({length:10}, ()=>[]), score:null, complete:false};
+}
+
+function renderFrameEntry(){
+  const fe = $("#frame-entry");
+  if(!fe) return;
+  fe.innerHTML = frameGames.map((g,gi)=>frameGameHtml(g,gi)).join("") +
+    (frameGames.length<5
+      ? `<button class="btn gray sm" onclick="addFrameGame()">＋ ゲームを追加(フレーム入力)</button>` : "");
+  // イベント設定
+  fe.querySelectorAll("input[data-g]").forEach(inp=>{
+    inp.addEventListener("input", onFrameInput);
+  });
+}
+
+function frameGameHtml(g, gi){
+  const calc = calcGame(g.frames);
+  const marks = g.frames.map((fr,f)=>{
+    return `<div class="fr-mark">${frameMark(fr,f)}</div>`;
+  }).join("");
+  const stat = calc.complete
+    ? `<span class="tag hd" style="background:#e6f4ea;color:var(--success)">確定 ${calc.total}点</span>
+       <span class="small">X${calc.strikes} / ${calc.spares}</span>`
+    : `<span class="small">途中: ${calc.cum.filter(c=>c!==null).slice(-1)[0] ?? "-"}点</span>`;
+  return `<div class="venue-card" style="margin-bottom:12px">
+    <div class="head">
+      <div class="name">${gi+1}ゲーム目</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        ${stat}
+        ${frameGames.length>1?`<button class="rm" onclick="delFrameGame(${gi})" style="border:none;background:#f3f4f6;color:var(--danger);border-radius:8px;width:30px;height:30px;cursor:pointer">✕</button>`:""}
+      </div>
+    </div>
+    <div class="frame-strip">${g.frames.map((fr,f)=>frameInputsHtml(fr,gi,f)).join("")}</div>
+    <div class="frame-marks">${marks}</div>
+    ${frameError(g) ? `<div class="small" style="color:var(--danger);margin-top:4px">${frameError(g)}</div>` : ""}
+  </div>`;
+}
+
+function frameInputsHtml(fr, gi, f){
+  const is10 = f===9;
+  const cells = is10?3:2;
+  let html = `<div class="fr-box${is10?" fr10":""}"><div class="fr-no">${f+1}</div><div class="fr-inputs">`;
+  for(let t=0;t<cells;t++){
+    const v = fr[t];
+    html += `<input type="number" min="0" max="10" inputmode="numeric" data-g="${gi}" data-f="${f}" data-t="${t}" value="${v===undefined||v===null?"":v}" ${frameInputDisabled(fr,f,t)?"disabled":""}>`;
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+// 入力を無効化するか(ストライク後の2投目など)
+function frameInputDisabled(fr, f, t){
+  if(f<9){
+    if(t===1 && fr[0]===10) return true; // ストライク後は2投目なし
+    if(t===1 && (fr[0]===undefined||fr[0]===null)) return false;
+    return false;
+  }
+  // 10F
+  if(t===1) return fr[0]===undefined||fr[0]===null;
+  if(t===2){
+    if(fr[0]===10) return fr[1]===undefined||fr[1]===null ? false : false; // 1投目Xなら2投目から有効
+    return !(fr[0]!==undefined && fr[0]!==null && fr[1]!==undefined && fr[1]!==null && fr[0]+fr[1]===10);
+  }
+  return false;
+}
+
+// フレームの表示マーク
+function frameMark(fr, f){
+  const v = i => fr[i];
+  const has = i => fr[i]!==undefined && fr[i]!==null;
+  const X = "X", SP = "/";
+  if(f<9){
+    if(has(0) && v(0)===10) return X;
+    if(has(0) && has(1)){
+      if(v(0)+v(1)===10) return `${v(0)||"-"}${SP}`;
+      return `${v(0)} ${v(1)}`;
+    }
+    if(has(0)) return `${v(0)}`;
+    return "";
+  }
+  // 10F
+  let s = "";
+  if(has(0)) s += v(0)===10?X:v(0);
+  if(has(1)){
+    if(v(0)===10) s += v(1)===10?" X":" "+v(1);
+    else s += v(0)+v(1)===10?SP:" "+v(1);
+  }
+  if(has(2)) s += v(2)===10?" X":" "+v(2);
+  return s;
+}
+
+// バリデーション(エラーメッセージ or null)
+function frameError(g){
+  for(let f=0; f<10; f++){
+    const fr = g.frames[f];
+    const has = i => fr[i]!==undefined && fr[i]!==null;
+    if(f<9){
+      if(has(0) && has(1) && fr[0]!==10 && fr[0]+fr[1]>10) return `${f+1}フレーム: 2投の合計は10以下にしてください`;
+    }else{
+      if(has(0) && has(1) && fr[0]!==10 && fr[0]+fr[1]>10) return `10フレーム: 1・2投目の合計は10以下にしてください`;
+      if(has(1) && has(2) && fr[0]===10 && fr[1]!==10 && fr[1]+fr[2]>10) return `10フレーム: 2・3投目の合計は10以下にしてください`;
+    }
+    for(let t=0;t<fr.length;t++){
+      if(has(t) && (fr[t]<0 || fr[t]>10)) return `${f+1}フレーム: 0〜10で入力してください`;
+    }
+  }
+  return null;
+}
+
+function onFrameInput(e){
+  const inp = e.target;
+  const gi = Number(inp.dataset.g), f = Number(inp.dataset.f), t = Number(inp.dataset.t);
+  let v = inp.value===""? null : Math.round(Number(inp.value));
+  if(v!==null){ v = Math.max(0, Math.min(10, v)); }
+  const g = frameGames[gi];
+  g.frames[f][t] = v===null? undefined : v;
+  // 1-9Fでストライクなら2投目を消す
+  if(f<9 && t===0 && v===10){ g.frames[f][1] = undefined; }
+  // 再描画(フォーカス保持のため部分更新: マークとステータスのみ)
+  const gi2 = gi;
+  const card = inp.closest(".venue-card");
+  const calc = calcGame(g.frames);
+  // マーク更新
+  const marks = card.querySelectorAll(".fr-mark");
+  marks.forEach((m,i)=> m.textContent = frameMark(g.frames[i], i));
+  // ステータス更新
+  const head = card.querySelector(".head div:last-child");
+  if(head){
+    const stat = calc.complete
+      ? `<span class="tag hd" style="background:#e6f4ea;color:var(--success)">確定 ${calc.total}点</span>
+         <span class="small">X${calc.strikes} / ${calc.spares}</span>`
+      : `<span class="small">途中: ${calc.cum.filter(c=>c!==null).slice(-1)[0] ?? "-"}点</span>`;
+    const delBtn = head.querySelector(".rm");
+    head.innerHTML = stat;
+    if(delBtn) head.appendChild(delBtn);
+  }
+  // ストライク等でdisabled状態が変わるので入力欄を更新(フォーカス中以外)
+  card.querySelectorAll("input[data-g]").forEach(i2=>{
+    const nf = Number(i2.dataset.f), nt = Number(i2.dataset.t);
+    const dis = frameInputDisabled(g.frames[nf], nf, nt);
+    i2.disabled = dis;
+    if(dis && i2!==inp) i2.value = "";
+  });
+  // エラー表示
+  const err = frameError(g);
+  let errEl = card.querySelector(".frame-err");
+  if(err){
+    if(!errEl){ errEl = document.createElement("div"); errEl.className="frame-err small"; errEl.style.cssText="color:var(--danger);margin-top:4px"; card.appendChild(errEl); }
+    errEl.textContent = err;
+  }else if(errEl){ errEl.remove(); }
+}
+
+function addFrameGame(){
+  if(frameGames.length>=5) return;
+  frameGames.push(newFrameGame());
+  renderFrameEntry();
+}
+function delFrameGame(gi){
+  frameGames.splice(gi,1);
+  renderFrameEntry();
 }
 function addGameRow(init){
   const wrap = $("#game-rows");
@@ -466,20 +729,47 @@ async function saveSession(){
   const memo = $("#r-memo").value.trim();
   if(!memberId){ alert("メンバーを選択してください"); return; }
   if(!venueId){ alert("会場を選択してください (未登録なら「＋会場」から追加)"); return; }
-  const games = [...$("#game-rows").querySelectorAll("input")].map(i=>i.value).filter(v=>v!=="").map(v=>{
-    const n = Math.round(Number(v));
-    return (isNaN(n)||n<0)?0:Math.min(300,n);
-  });
-  if(!games.length){ alert("スコアを1ゲーム以上入力してください"); return; }
-  const btn = document.activeElement;
+  let games = [];
+  let gamesDetail = null;
+  if(inputMode === "score"){
+    games = [...$("#game-rows").querySelectorAll("input")].map(i=>i.value).filter(v=>v!=="").map(v=>{
+      const n = Math.round(Number(v));
+      return (isNaN(n)||n<0)?0:Math.min(300,n);
+    });
+    if(!games.length){ alert("スコアを1ゲーム以上入力してください"); return; }
+  }else{
+    // フレーム入力モード: 完全なゲームのみ保存対象
+    const completeOnes = [];
+    const errors = [];
+    frameGames.forEach((g, gi)=>{
+      const err = frameError(g);
+      if(err){ errors.push(`${gi+1}ゲーム目: ${err}`); return; }
+      const calc = calcGame(g.frames);
+      if(calc.complete) completeOnes.push({calc, frames:g.frames});
+    });
+    if(errors.length){ alert(errors.join("\n")); return; }
+    if(!completeOnes.length){ alert("最後のフレームまで入力が完了したゲームがありません。\n10フレーム目まで入力してください。"); return; }
+    games = completeOnes.map(c=>c.calc.total);
+    gamesDetail = completeOnes.map(c=>({
+      score: c.calc.total,
+      strikes: c.calc.strikes,
+      spares: c.calc.spares,
+      opens: c.calc.opens,
+      frames: c.frames.map(fr=>fr.map(p=>p===undefined?null:p))
+    }));
+  }
   try{
-    await fsAdd("sessions", {date, memberId, venueId, games, memo, createdAt:Date.now()});
+    const doc = {date, memberId, venueId, games, memo, createdAt:Date.now()};
+    if(gamesDetail) doc.gamesDetail = gamesDetail;
+    await fsAdd("sessions", doc);
   }catch(e){
     console.error(e);
     alert("保存に失敗しました。ネット接続とFirebase設定を確認してください。");
     return;
   }
   gameCount = 3;
+  frameGames = [newFrameGame()];
+  inputMode = "score";
   render();
   window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -502,6 +792,29 @@ function viewAnalysis(){
 
   const target = analysisMember==="all" ? games : games.filter(g=>g.memberId===analysisMember);
   const label = analysisMember==="all" ? "全員" : memberName(analysisMember);
+
+  // ストライク/スペア率の集計(詳細記録があるゲームのみ)
+  function calcRates(gameRows){
+    let nFrames=0, strikes=0, spares=0, opens=0, nGames=0;
+    for(const g of gameRows){
+      const s = DB.data.sessions.find(x=>x.id===g.sessionId);
+      const d = s && s.gamesDetail && s.gamesDetail[g.gameNo-1];
+      if(!d) continue; // 合計点のみの記録は率の対象外
+      nGames++;
+      nFrames += 10;
+      strikes += d.strikes||0;
+      spares  += d.spares||0;
+      opens   += d.opens||0;
+    }
+    if(!nGames) return null;
+    return {
+      nGames,
+      strikeRate: strikes/nFrames*100,
+      spareRate: spares/nFrames*100,
+      openRate: opens/nFrames*100,
+      strikes, spares, opens, nFrames
+    };
+  }
 
   // 上達度
   let improvHtml;
@@ -545,10 +858,15 @@ function viewAnalysis(){
       trend = l-e;
     }
     const lastDate = gs[gs.length-1].date;
-    return {vid, name:venueName(vid), n:gs.length, avg, max, min, trend, lastDate};
+    // 会場別のストライク/スペア率
+    const rates = calcRates(gs);
+    return {vid, name:venueName(vid), n:gs.length, avg, max, min, trend, lastDate, rates};
   }).sort((a,b)=>b.avg-a.avg);
 
   const maxAvg = Math.max(...venueRows.map(v=>v.avg));
+
+  // ストライク/スペア率(対象全体)
+  const overallRates = calcRates(target);
 
   return `
   <div class="card">
@@ -564,6 +882,17 @@ function viewAnalysis(){
     <h2>🚀 上達度</h2>
     ${improvHtml}
   </div>
+  ${overallRates?`
+  <div class="card">
+    <h2>🎯 ストライク・スペア率</h2>
+    <div class="small" style="margin-bottom:8px">フレーム入力で記録された ${overallRates.nGames}ゲーム / ${overallRates.nFrames}フレームが対象</div>
+    <div class="grid3">
+      <div class="stat"><div class="num" style="color:var(--accent)">${fmt1(overallRates.strikeRate)}<span style="font-size:14px">%</span></div><div class="lbl">ストライク率 (${overallRates.strikes}回)</div></div>
+      <div class="stat"><div class="num" style="color:var(--success)">${fmt1(overallRates.spareRate)}<span style="font-size:14px">%</span></div><div class="lbl">スペア率 (${overallRates.spares}回)</div></div>
+      <div class="stat"><div class="num" style="color:var(--danger)">${fmt1(overallRates.openRate)}<span style="font-size:14px">%</span></div><div class="lbl">オープン率 (${overallRates.opens}回)</div></div>
+    </div>
+    <div class="small" style="margin-top:8px">ストライク率・スペア率が上がるほど高スコアに直結します。オープンフレーム(ノーマーク)を減らすのが上達の近道です。</div>
+  </div>`:""}
   <div class="card">
     <h2>📉 スコア推移</h2>
     <div class="small" style="margin-bottom:6px">実線: 各ゲーム / 太線: 5ゲーム移動平均</div>
@@ -585,6 +914,11 @@ function viewAnalysis(){
           ・ 全体平均比 <span class="${diff>=0?"diff-pos":"diff-neg"}">${diff>=0?"+":""}${fmt1(diff)}</span>
           ${v.trend!==null?` ・ 会場内の伸び <span class="${v.trend>=0?"diff-pos":"diff-neg"}">${v.trend>=0?"+":""}${fmt1(v.trend)}</span>`:""}
         </div>
+        ${v.rates?`<div class="small" style="margin-top:4px">
+          🎯 ストライク率 <b style="color:var(--accent)">${fmt1(v.rates.strikeRate)}%</b>
+          ・ スペア率 <b style="color:var(--success)">${fmt1(v.rates.spareRate)}%</b>
+          <span style="color:var(--sub)">(${v.rates.nGames}G分)</span>
+        </div>`:""}
       </div>`;
     }).join("")}
     <h3>会場別 平均比較</h3>
@@ -860,7 +1194,18 @@ async function loadSample(){
         const v = Math.round(base[mi] + vmod[vi] + growth + (rand()-0.5)*36 + g*3);
         games.push(Math.max(60, Math.min(280, v)));
       }
-      sItems.push({coll:"sessions", data:{date, memberId:memIds[mi], venueId:venIds[vi], games, memo:"", createdAt:d.getTime()+gN}});
+      // 直近3週はフレーム詳細つきで生成(ストライク/スペア率のデモ用)
+      const data = {date, memberId:memIds[mi], venueId:venIds[vi], games, memo:"", createdAt:d.getTime()+gN};
+      if(w<=3){
+        data.gamesDetail = games.map(score=>{
+          // スコアに見合うストライク/スペア数をざっくり推定してデモデータ化
+          const st = Math.max(0, Math.round((score-110)/30 + (rand()-0.5)*2));
+          const sp = Math.max(0, Math.min(10-st, Math.round((score-100)/25 + (rand()-0.5)*2)));
+          const op = 10 - st - sp;
+          return {score, strikes:st, spares:sp, opens:op, frames:[]};
+        });
+      }
+      sItems.push({coll:"sessions", data});
     }
   }
   await fsBatchAdd(sItems);
