@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="練習ノート" />
+<meta name="theme-color" content="#0b3d91" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<link rel="icon" href="icon-192.png" />
+<script src="firebase-config.js"></script>
+<title>ボウリング練習ノート</title>
+<style>
+  :root{
+    --bg:#f5f7fb;
+    --card:#ffffff;
+    --primary:#0b3d91;
+    --primary-2:#1657c9;
+    --accent:#ff6b1a;
+    --danger:#d93025;
+    --success:#1e8e3e;
+    --lane:#d97706;
+    --text:#111827;
+    --sub:#6b7280;
+    --border:#e5e7eb;
+    --stripe:#f9fafb;
+    --shadow:0 4px 14px rgba(0,0,0,.08);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+    font-size:16px;line-height:1.5;
+    padding-top:env(safe-area-inset-top);
+  }
+  header{
+    background:linear-gradient(135deg,var(--primary),var(--primary-2));
+    color:#fff;padding:14px 16px;
+    position:sticky;top:0;z-index:20;
+    box-shadow:var(--shadow);
+    padding-top:calc(14px + env(safe-area-inset-top));
+  }
+  header h1{font-size:18px;margin:0;display:flex;align-items:center;gap:8px}
+  header h1 .emoji{font-size:22px}
+  header .sub{font-size:12px;opacity:.85;margin-top:2px}
+  main{padding:12px 12px 96px 12px;max-width:720px;margin:0 auto}
+  .card{background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:14px;margin-bottom:14px}
+  h2{font-size:17px;margin:0 0 10px 0;color:var(--primary);border-left:5px solid var(--primary);padding-left:8px}
+  h3{font-size:15px;margin:12px 0 6px;color:#374151}
+  label{display:block;font-size:13px;color:var(--sub);margin-bottom:4px}
+  input[type=text],input[type=date],input[type=number],select,textarea{
+    width:100%;padding:12px;font-size:16px;border:1px solid var(--border);
+    border-radius:10px;background:#fff;font-family:inherit;
+  }
+  input[type=number]{ -moz-appearance:textfield }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
+  .row{display:flex;gap:8px;align-items:center}
+  .row > *{flex:1}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:14px 16px;border:none;border-radius:12px;
+    font-size:16px;font-weight:700;color:#fff;background:var(--primary);
+    cursor:pointer;min-height:48px;width:100%;
+  }
+  .btn.accent{background:var(--accent)}
+  .btn.danger{background:var(--danger)}
+  .btn.gray{background:#6b7280}
+  .btn.ghost{background:#fff;color:var(--primary);border:2px solid var(--primary)}
+  .btn.sm{padding:8px 10px;font-size:13px;min-height:36px;width:auto}
+  .btn:active{transform:scale(.98)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .stat{background:var(--stripe);border-radius:12px;padding:10px;text-align:center}
+  .stat .num{font-size:24px;font-weight:800;color:var(--primary);line-height:1.2}
+  .stat .lbl{font-size:11px;color:var(--sub)}
+  .tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:#eef2ff;color:var(--primary);margin-right:4px}
+  .tag.venue{background:#fff4e6;color:#c2410c}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 6px;border-bottom:1px solid var(--border);text-align:center}
+  th{background:var(--stripe);color:#374151;font-weight:600}
+  .small{font-size:12px;color:var(--sub)}
+  .center{text-align:center}
+  .empty{padding:24px;text-align:center;color:var(--sub);font-size:14px;border:2px dashed var(--border);border-radius:12px}
+  .list{list-style:none;margin:0;padding:0}
+  .list li{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--border)}
+  .list li:last-child{border-bottom:none}
+  .grow{flex:1;min-width:0}
+  /* 下部タブ */
+  nav.tabs{
+    position:fixed;left:0;right:0;bottom:0;z-index:30;
+    background:#fff;border-top:1px solid var(--border);
+    display:flex;max-width:720px;margin:0 auto;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.tabs button{
+    flex:1;border:none;background:none;padding:8px 2px 10px;
+    font-size:11px;color:var(--sub);cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:2px;font-weight:600;
+  }
+  nav.tabs button .ic{font-size:20px}
+  nav.tabs button.on{color:var(--primary)}
+  /* スコアチップ */
+  .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+  .chip{background:#eef2ff;color:var(--primary);border-radius:8px;padding:2px 8px;font-size:13px;font-weight:700;min-width:34px;text-align:center}
+  .chip.best{background:#fff4e6;color:#c2410c}
+  /* 上達バッジ */
+  .badge-up{display:inline-flex;align-items:center;gap:4px;background:#e6f4ea;color:var(--success);font-weight:800;border-radius:999px;padding:4px 12px;font-size:15px}
+  .badge-down{display:inline-flex;align-items:center;gap:4px;background:#fce8e6;color:var(--danger);font-weight:800;border-radius:999px;padding:4px 12px;font-size:15px}
+  .badge-flat{display:inline-flex;align-items:center;gap:4px;background:#f3f4f6;color:var(--sub);font-weight:800;border-radius:999px;padding:4px 12px;font-size:15px}
+  /* 会場カード */
+  .venue-card{border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px}
+  .venue-card .head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .venue-card .name{font-weight:800;font-size:15px}
+  .venue-card .avg{font-size:22px;font-weight:800;color:var(--lane)}
+  .bar-outer{background:#f3f4f6;border-radius:999px;height:10px;overflow:hidden;margin-top:6px}
+  .bar-inner{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--lane),#f59e0b)}
+  .diff-pos{color:var(--success);font-weight:700}
+  .diff-neg{color:var(--danger);font-weight:700}
+  /* ゲーム入力行 */
+  .game-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .game-row .gno{flex:0 0 44px;font-weight:700;color:var(--sub);font-size:14px}
+  .game-row input{flex:1}
+  .game-row .rm{flex:0 0 auto;border:none;background:#f3f4f6;color:var(--danger);border-radius:8px;width:36px;height:36px;font-size:16px;cursor:pointer}
+  .hidden{display:none !important}
+  .filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .filter-row button{border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer;color:var(--sub)}
+  .filter-row button.on{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:700}
+  .divider{height:1px;background:var(--border);margin:14px 0}
+  svg text{font-family:inherit}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="emoji">🎳</span>ボウリング練習ノート</h1>
+  <div class="sub">みんなの練習記録と上達度・会場別スコア傾向</div>
+  <div class="sub" id="sync-status">接続準備中…</div>
+</header>
+<main id="app"></main>
+<nav class="tabs" id="tabs">
+  <button data-tab="home" class="on"><span class="ic">🏠</span>ホーム</button>
+  <button data-tab="record"><span class="ic">📝</span>きろく</button>
+  <button data-tab="analysis"><span class="ic">📈</span>ぶんせき</button>
+  <button data-tab="admin"><span class="ic">⚙️</span>かんり</button>
+</nav>
+
+<script>
+"use strict";
+// ---------- ユーティリティ ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+const fmt1 = v => (Math.round(v*10)/10).toFixed(1);
+const todayStr = () => {
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+};
+
+// ---------- DB(表示用のローカルキャッシュ) ----------
+const DB = {
+  key:"bowling_practice_v2",
+  data:{ members:[], venues:[], sessions:[] },
+  load(){
+    try{
+      const raw = localStorage.getItem(this.key);
+      if(raw) this.data = Object.assign({members:[],venues:[],sessions:[]}, JSON.parse(raw));
+    }catch(e){ console.warn(e); }
+  },
+  save(){ localStorage.setItem(this.key, JSON.stringify(this.data)); }
+};
+DB.load();
+
+// ---------- クラウド同期レイヤー ----------
+// mode: 'local' (端末内保存のみ) / 'cloud' (Firestoreリアルタイム共有)
+const Sync = { mode:"local", db:null, fs:null };
+
+// 追加: 新しいidを返す
+async function fsAdd(coll, obj){
+  if(Sync.mode==="cloud"){
+    const ref = await Sync.fs.addDoc(Sync.fs.collection(Sync.db, coll), obj);
+    return ref.id;
+  }
+  const id = uid();
+  DB.data[coll].push({id, ...obj});
+  DB.save();
+  return id;
+}
+// 更新
+async function fsSet(coll, id, patch){
+  if(Sync.mode==="cloud"){
+    await Sync.fs.updateDoc(Sync.fs.doc(Sync.db, coll, id), patch);
+    return;
+  }
+  const it = DB.data[coll].find(x=>x.id===id);
+  if(it) Object.assign(it, patch);
+  DB.save();
+}
+// 削除
+async function fsDel(coll, id){
+  if(Sync.mode==="cloud"){
+    await Sync.fs.deleteDoc(Sync.fs.doc(Sync.db, coll, id));
+    return;
+  }
+  DB.data[coll] = DB.data[coll].filter(x=>x.id!==id);
+  DB.save();
+}
+// バッチ書き込み(450件チャンク)。items: [{coll, data}]
+async function fsBatchAdd(items){
+  if(Sync.mode==="cloud"){
+    for(let i=0;i<items.length;i+=450){
+      const b = Sync.fs.writeBatch(Sync.db);
+      for(const it of items.slice(i,i+450)){
+        const ref = Sync.fs.doc(Sync.fs.collection(Sync.db, it.coll));
+        b.set(ref, it.data);
+        if(it.localEcho) it.localEcho.id = ref.id;
+      }
+      await b.commit();
+    }
+    return;
+  }
+  for(const it of items){
+    DB.data[it.coll].push({id:uid(), ...it.data});
+  }
+  DB.save();
+}
+
+// Firebase 接続(設定があればクラウドモードへ)
+async function initCloudSync(){
+  const el = document.getElementById("sync-status");
+  const cfg = window.FIREBASE_CONFIG;
+  const isConfigured = cfg && cfg.apiKey && !String(cfg.apiKey).startsWith("ここに");
+  if(!isConfigured){
+    if(el) el.textContent = "📱 ローカルモード(この端末のみ保存)";
+    return;
+  }
+  try{
+    const appMod = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js");
+    const fsMod  = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js");
+    const auMod  = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js");
+    const app = appMod.initializeApp(cfg);
+    const db  = fsMod.getFirestore(app);
+    try{
+      await auMod.signInAnonymously(auMod.getAuth(app));
+    }catch(e){
+      console.warn("匿名認証に失敗(認証なしルールなら動作します):", e);
+    }
+    Sync.mode = "cloud"; Sync.db = db; Sync.fs = fsMod;
+    if(el) el.textContent = "☁️ クラウド共有モード — みんなの記録がリアルタイムで集まります";
+    // 3コレクションをリアルタイム購読
+    for(const coll of ["members","venues","sessions"]){
+      fsMod.onSnapshot(fsMod.collection(db, coll), snap=>{
+        const rows = [];
+        snap.forEach(d=> rows.push(Object.assign({id:d.id}, d.data())));
+        DB.data[coll] = rows;
+        DB.save(); // オフライン用キャッシュ
+        // きろくタブで入力中は画面を書き換えない(入力が消えるのを防ぐ)
+        if(currentTab !== "record") render();
+      }, err=>{
+        console.error(err);
+        if(el) el.textContent = "⚠️ クラウド接続エラー — キャッシュを表示中";
+      });
+    }
+  }catch(e){
+    console.warn("Firebase初期化に失敗:", e);
+    if(el) el.textContent = "📱 ローカルモード(Firebase接続失敗)";
+  }
+}
+
+const memberName = id => (DB.data.members.find(m=>m.id===id)||{}).name || "（削除済み）";
+const venueName  = id => (DB.data.venues.find(v=>v.id===id)||{}).name || "（削除済み）";
+
+// 全ゲームを時系列で平坦化 {date, createdAt, memberId, venueId, score, gameNo, sessionId}
+function allGames(){
+  const rows = [];
+  for(const s of DB.data.sessions){
+    (s.games||[]).forEach((g,i)=>{
+      if(g==null || g==="") return;
+      rows.push({date:s.date, createdAt:s.createdAt||0, memberId:s.memberId, venueId:s.venueId, score:Number(g), gameNo:i+1, sessionId:s.id});
+    });
+  }
+  rows.sort((a,b)=> a.date===b.date ? (a.createdAt-b.createdAt || a.gameNo-b.gameNo) : (a.date<b.date?-1:1));
+  return rows;
+}
+
+// ---------- タブ ----------
+let currentTab = "home";
+let analysisMember = "all"; // 'all' or memberId
+const tabsEl = $("#tabs");
+tabsEl.addEventListener("click", e=>{
+  const b = e.target.closest("button[data-tab]");
+  if(!b) return;
+  currentTab = b.dataset.tab;
+  [...tabsEl.querySelectorAll("button")].forEach(x=>x.classList.toggle("on", x===b));
+  render();
+});
+
+function render(){
+  const app = $("#app");
+  if(currentTab==="home") app.innerHTML = viewHome();
+  else if(currentTab==="record"){ app.innerHTML = viewRecord(); initGameRows(); }
+  else if(currentTab==="analysis"){ app.innerHTML = viewAnalysis(); drawCharts(); }
+  else if(currentTab==="admin") app.innerHTML = viewAdmin();
+}
+
+// ==================== ホーム ====================
+function viewHome(){
+  const games = allGames();
+  const totalGames = games.length;
+  const avg = totalGames ? games.reduce((a,g)=>a+g.score,0)/totalGames : 0;
+  const best = totalGames ? Math.max(...games.map(g=>g.score)) : 0;
+  const monthKey = todayStr().slice(0,7);
+  const monthGames = games.filter(g=>g.date.startsWith(monthKey)).length;
+
+  const recent = DB.data.sessions.slice().sort((a,b)=> b.date===a.date ? (b.createdAt||0)-(a.createdAt||0) : (a.date<b.date?1:-1)).slice(0,5);
+
+  let recentHtml;
+  if(!recent.length){
+    recentHtml = `<div class="empty">まだ記録がありません。<br>「📝 きろく」タブから最初の練習を記録しましょう！</div>`;
+  }else{
+    recentHtml = `<ul class="list">` + recent.map(s=>{
+      const gs = (s.games||[]).filter(g=>g!==null&&g!=="").map(Number);
+      const a = gs.length ? gs.reduce((x,y)=>x+y,0)/gs.length : 0;
+      const mx = gs.length ? Math.max(...gs) : 0;
+      return `<li>
+        <div class="grow">
+          <div><b>${esc(memberName(s.memberId))}</b> <span class="tag venue">📍${esc(venueName(s.venueId))}</span></div>
+          <div class="small">${esc(s.date)} ・ ${gs.length}G ・ 平均 ${fmt1(a)}</div>
+          <div class="chips">${gs.map(g=>`<span class="chip${g===mx&&gs.length>1?" best":""}">${g}</span>`).join("")}</div>
+        </div>
+      </li>`;
+    }).join("") + `</ul>`;
+  }
+
+  // メンバー別 上達サマリー(直近5G - 最初の5G)
+  const improv = DB.data.members.map(m=>{
+    const gs = games.filter(g=>g.memberId===m.id);
+    const w = Math.min(5, Math.floor(gs.length/2));
+    if(gs.length < 6) return null;
+    const early = gs.slice(0,w), late = gs.slice(-w);
+    const ea = early.reduce((a,g)=>a+g.score,0)/w;
+    const la = late.reduce((a,g)=>a+g.score,0)/w;
+    return {name:m.name, diff:la-ea, n:gs.length};
+  }).filter(Boolean).sort((a,b)=>b.diff-a.diff).slice(0,3);
+
+  return `
+  <div class="card">
+    <h2>📊 みんなの状況</h2>
+    <div class="grid3">
+      <div class="stat"><div class="num">${DB.data.members.length}</div><div class="lbl">メンバー</div></div>
+      <div class="stat"><div class="num">${totalGames}</div><div class="lbl">総ゲーム数</div></div>
+      <div class="stat"><div class="num">${monthGames}</div><div class="lbl">今月のゲーム</div></div>
+    </div>
+    <div class="grid2" style="margin-top:8px">
+      <div class="stat"><div class="num">${totalGames?fmt1(avg):"-"}</div><div class="lbl">全体平均</div></div>
+      <div class="stat"><div class="num">${totalGames?best:"-"}</div><div class="lbl">全体ハイスコア</div></div>
+    </div>
+  </div>
+  ${improv.length?`
+  <div class="card">
+    <h2>🚀 上達ランキング</h2>
+    <div class="small" style="margin-bottom:8px">最初の5ゲーム平均 → 直近5ゲーム平均の伸び</div>
+    <ul class="list">
+      ${improv.map((p,i)=>`<li>
+        <div style="flex:0 0 28px;font-weight:800;color:${i===0?"var(--accent)":"var(--sub)"}">${i+1}</div>
+        <div class="grow"><b>${esc(p.name)}</b> <span class="small">(${p.n}G)</span></div>
+        <span class="${p.diff>0?"badge-up":p.diff<0?"badge-down":"badge-flat"}">${p.diff>0?"▲":p.diff<0?"▼":"－"} ${p.diff>0?"+":""}${fmt1(p.diff)}</span>
+      </li>`).join("")}
+    </ul>
+  </div>`:""}
+  <div class="card">
+    <h2>🕒 最近の記録</h2>
+    ${recentHtml}
+  </div>`;
+}
+
+// ==================== きろく ====================
+let gameCount = 3;
+function viewRecord(){
+  const mOpts = DB.data.members.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja"))
+    .map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
+  const vOpts = DB.data.venues.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja"))
+    .map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join("");
+
+  const sessions = DB.data.sessions.slice().sort((a,b)=> b.date===a.date ? (b.createdAt||0)-(a.createdAt||0) : (a.date<b.date?1:-1));
+
+  return `
+  <div class="card">
+    <h2>📝 練習を記録する</h2>
+    ${DB.data.members.length===0?`<div class="empty" style="margin-bottom:10px">先に「⚙️ かんり」タブでメンバーを登録してください。</div>`:""}
+    <div class="row" style="margin-bottom:10px">
+      <div><label>日付</label><input type="date" id="r-date" value="${todayStr()}"></div>
+      <div><label>メンバー</label><select id="r-member">${mOpts||'<option value="">(未登録)</option>'}</select></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label>会場</label>
+      <div class="row">
+        <select id="r-venue">${vOpts||'<option value="">(未登録)</option>'}</select>
+        <button class="btn ghost sm" style="flex:0 0 auto" onclick="quickAddVenue()">＋会場</button>
+      </div>
+    </div>
+    <label>スコア(0〜300)</label>
+    <div id="game-rows"></div>
+    <button class="btn gray sm" onclick="addGameRow()" ${DB.data.members.length===0?"disabled":""}>＋ ゲームを追加</button>
+    <div style="margin-top:10px"><label>メモ(任意)</label><input type="text" id="r-memo" placeholder="例: オイル多め、スペア好調 など"></div>
+    <div style="margin-top:12px"><button class="btn accent" onclick="saveSession()" ${DB.data.members.length===0?"disabled":""}>💾 この記録を保存</button></div>
+    ${Sync.mode==="cloud"?'<div class="small center" style="margin-top:6px">☁️ 保存すると全員の端末にすぐ反映されます</div>':""}
+  </div>
+  <div class="card">
+    <h2>📋 記録一覧 (${sessions.length}件)</h2>
+    ${sessions.length? `<ul class="list">`+sessions.map(s=>{
+      const gs = (s.games||[]).filter(g=>g!==null&&g!=="").map(Number);
+      const a = gs.length? gs.reduce((x,y)=>x+y,0)/gs.length:0;
+      return `<li>
+        <div class="grow">
+          <div><b>${esc(memberName(s.memberId))}</b> <span class="tag venue">📍${esc(venueName(s.venueId))}</span></div>
+          <div class="small">${esc(s.date)} ・ ${gs.length}G ・ 平均 ${fmt1(a)}${s.memo? " ・ " + esc(s.memo):""}</div>
+          <div class="chips">${gs.map(g=>`<span class="chip">${g}</span>`).join("")}</div>
+        </div>
+        <button class="btn danger sm" onclick="delSession('${s.id}')">削除</button>
+      </li>`;
+    }).join("")+`</ul>` : `<div class="empty">まだ記録がありません。</div>`}
+  </div>`;
+}
+
+function initGameRows(){
+  const wrap = $("#game-rows");
+  wrap.innerHTML = "";
+  for(let i=0;i<gameCount;i++) addGameRow(true);
+}
+function addGameRow(init){
+  const wrap = $("#game-rows");
+  const n = wrap.children.length;
+  if(n>=10) { alert("1回の記録は10ゲームまでです"); return; }
+  const div = document.createElement("div");
+  div.className = "game-row";
+  div.innerHTML = `<div class="gno">${n+1}G</div><input type="number" min="0" max="300" inputmode="numeric" placeholder="スコア"><button class="rm" type="button">✕</button>`;
+  div.querySelector(".rm").onclick = ()=>{ div.remove(); renumberGames(); };
+  wrap.appendChild(div);
+  gameCount = wrap.children.length;
+  if(!init) div.querySelector("input").focus();
+}
+function renumberGames(){
+  [...$("#game-rows").children].forEach((d,i)=> d.querySelector(".gno").textContent = (i+1)+"G");
+  gameCount = $("#game-rows").children.length;
+}
+async function quickAddVenue(){
+  const name = prompt("会場名を入力してください (例: ○○ボウル)");
+  if(!name || !name.trim()) return;
+  const id = await fsAdd("venues", {name:name.trim(), createdAt:Date.now()});
+  if(Sync.mode==="local"){
+    render();
+    $("#r-venue").value = id;
+  }else{
+    // クラウド時はスナップショット反映後に選択。入力中のフォームを壊さないよう中身だけ差し替え
+    const sel = $("#r-venue");
+    const opt = document.createElement("option");
+    opt.value = id; opt.textContent = name.trim();
+    sel.appendChild(opt); sel.value = id;
+  }
+}
+async function saveSession(){
+  const memberId = $("#r-member").value;
+  const venueId = $("#r-venue").value;
+  const date = $("#r-date").value || todayStr();
+  const memo = $("#r-memo").value.trim();
+  if(!memberId){ alert("メンバーを選択してください"); return; }
+  if(!venueId){ alert("会場を選択してください (未登録なら「＋会場」から追加)"); return; }
+  const games = [...$("#game-rows").querySelectorAll("input")].map(i=>i.value).filter(v=>v!=="").map(v=>{
+    const n = Math.round(Number(v));
+    return (isNaN(n)||n<0)?0:Math.min(300,n);
+  });
+  if(!games.length){ alert("スコアを1ゲーム以上入力してください"); return; }
+  const btn = document.activeElement;
+  try{
+    await fsAdd("sessions", {date, memberId, venueId, games, memo, createdAt:Date.now()});
+  }catch(e){
+    console.error(e);
+    alert("保存に失敗しました。ネット接続とFirebase設定を確認してください。");
+    return;
+  }
+  gameCount = 3;
+  render();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+async function delSession(id){
+  if(!confirm("この記録を削除しますか?")) return;
+  await fsDel("sessions", id);
+  render();
+}
+
+// ==================== ぶんせき ====================
+function viewAnalysis(){
+  const games = allGames();
+  if(!games.length){
+    return `<div class="card"><h2>📈 ぶんせき</h2><div class="empty">記録がまだありません。<br>練習を記録すると、ここに上達度や会場別の傾向が表示されます。</div></div>`;
+  }
+  const filterBtns = [`<button data-m="all" class="${analysisMember==="all"?"on":""}" onclick="setAnalysisMember('all')">全員</button>`]
+    .concat(DB.data.members.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja"))
+      .map(m=>`<button data-m="${m.id}" class="${analysisMember===m.id?"on":""}" onclick="setAnalysisMember('${m.id}')">${esc(m.name)}</button>`))
+    .join("");
+
+  const target = analysisMember==="all" ? games : games.filter(g=>g.memberId===analysisMember);
+  const label = analysisMember==="all" ? "全員" : memberName(analysisMember);
+
+  // 上達度
+  let improvHtml;
+  if(analysisMember==="all"){
+    improvHtml = `<div class="small">個人の上達度を見るには、上のボタンでメンバーを選んでください。</div>`;
+  }else{
+    const n = target.length;
+    const w = Math.min(5, Math.floor(n/2));
+    if(n<6){
+      improvHtml = `<div class="small">記録が ${n}G あります。6ゲーム以上で「初期→直近」の比較が表示されます。</div>`;
+    }else{
+      const ea = target.slice(0,w).reduce((a,g)=>a+g.score,0)/w;
+      const la = target.slice(-w).reduce((a,g)=>a+g.score,0)/w;
+      const diff = la-ea;
+      const badge = diff>0?`<span class="badge-up">▲ +${fmt1(diff)} 上達!</span>`:diff<0?`<span class="badge-down">▼ ${fmt1(diff)}</span>`:`<span class="badge-flat">－ 横ばい</span>`;
+      improvHtml = `
+        <div class="row" style="text-align:center">
+          <div class="stat"><div class="num">${fmt1(ea)}</div><div class="lbl">最初の${w}G平均</div></div>
+          <div style="flex:0 0 auto;font-size:20px;color:var(--sub)">→</div>
+          <div class="stat"><div class="num">${fmt1(la)}</div><div class="lbl">直近${w}G平均</div></div>
+        </div>
+        <div class="center" style="margin-top:10px">${badge}</div>`;
+    }
+  }
+
+  // 会場別
+  const byVenue = {};
+  for(const g of target){
+    (byVenue[g.venueId] = byVenue[g.venueId] || []).push(g);
+  }
+  const overallAvg = target.reduce((a,g)=>a+g.score,0)/target.length;
+  const venueRows = Object.entries(byVenue).map(([vid,gs])=>{
+    const avg = gs.reduce((a,g)=>a+g.score,0)/gs.length;
+    const max = Math.max(...gs.map(g=>g.score));
+    const min = Math.min(...gs.map(g=>g.score));
+    let trend = null;
+    if(gs.length>=6){
+      const w = Math.min(3, Math.floor(gs.length/2));
+      const e = gs.slice(0,w).reduce((a,g)=>a+g.score,0)/w;
+      const l = gs.slice(-w).reduce((a,g)=>a+g.score,0)/w;
+      trend = l-e;
+    }
+    const lastDate = gs[gs.length-1].date;
+    return {vid, name:venueName(vid), n:gs.length, avg, max, min, trend, lastDate};
+  }).sort((a,b)=>b.avg-a.avg);
+
+  const maxAvg = Math.max(...venueRows.map(v=>v.avg));
+
+  return `
+  <div class="card">
+    <h2>📈 ぶんせき — ${esc(label)}</h2>
+    <div class="filter-row">${filterBtns}</div>
+    <div class="grid3">
+      <div class="stat"><div class="num">${target.length}</div><div class="lbl">ゲーム数</div></div>
+      <div class="stat"><div class="num">${fmt1(overallAvg)}</div><div class="lbl">平均</div></div>
+      <div class="stat"><div class="num">${Math.max(...target.map(g=>g.score))}</div><div class="lbl">ハイスコア</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>🚀 上達度</h2>
+    ${improvHtml}
+  </div>
+  <div class="card">
+    <h2>📉 スコア推移</h2>
+    <div class="small" style="margin-bottom:6px">実線: 各ゲーム / 太線: 5ゲーム移動平均</div>
+    <div id="chart-trend"></div>
+  </div>
+  <div class="card">
+    <h2>📍 会場別スコア傾向</h2>
+    <div class="small" style="margin-bottom:10px">対象: ${esc(label)} — 会場ごとの平均の差で「相性」がわかります。</div>
+    ${venueRows.map(v=>{
+      const diff = v.avg-overallAvg;
+      return `<div class="venue-card">
+        <div class="head">
+          <div class="name">📍 ${esc(v.name)}</div>
+          <div class="avg">${fmt1(v.avg)}</div>
+        </div>
+        <div class="bar-outer"><div class="bar-inner" style="width:${Math.round(v.avg/maxAvg*100)}%"></div></div>
+        <div class="small" style="margin-top:6px">
+          ${v.n}G ・ 最高 ${v.max} / 最低 ${v.min} ・ 最終: ${esc(v.lastDate)}
+          ・ 全体平均比 <span class="${diff>=0?"diff-pos":"diff-neg"}">${diff>=0?"+":""}${fmt1(diff)}</span>
+          ${v.trend!==null?` ・ 会場内の伸び <span class="${v.trend>=0?"diff-pos":"diff-neg"}">${v.trend>=0?"+":""}${fmt1(v.trend)}</span>`:""}
+        </div>
+      </div>`;
+    }).join("")}
+    <h3>会場別 平均比較</h3>
+    <div id="chart-venue"></div>
+  </div>`;
+}
+function setAnalysisMember(id){ analysisMember = id; render(); }
+
+// ---------- SVG グラフ ----------
+function drawCharts(){
+  const games = allGames();
+  const target = analysisMember==="all" ? games : games.filter(g=>g.memberId===analysisMember);
+
+  // 推移グラフ
+  const trendEl = $("#chart-trend");
+  if(trendEl){
+    if(target.length<2){
+      trendEl.innerHTML = `<div class="empty">2ゲーム以上でグラフが表示されます。</div>`;
+    }else{
+      const W=600,H=240,P={l:38,r:12,t:14,b:30};
+      const n=target.length;
+      const scores=target.map(g=>g.score);
+      let ymin=Math.min(...scores), ymax=Math.max(...scores);
+      ymin=Math.max(0, Math.floor((ymin-15)/10)*10);
+      ymax=Math.min(300, Math.ceil((ymax+15)/10)*10);
+      const x=i=>P.l+(n===1?0:(W-P.l-P.r)*i/(n-1));
+      const y=v=>P.t+(H-P.t-P.b)*(1-(v-ymin)/(ymax-ymin||1));
+      const ma=scores.map((_,i)=>{
+        const s=Math.max(0,i-4);
+        const seg=scores.slice(s,i+1);
+        return seg.reduce((a,b)=>a+b,0)/seg.length;
+      });
+      const pts=scores.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const mPts=ma.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+      const step=Math.max(1,Math.ceil(n/6));
+      const labels=target.map((g,i)=> i%step===0?`<text x="${x(i)}" y="${H-8}" font-size="10" fill="#6b7280" text-anchor="middle">${g.date.slice(5).replace("-","/")}</text>`:"").join("");
+      const grid=[ymin,(ymin+ymax)/2,ymax].map(v=>`
+        <line x1="${P.l}" x2="${W-P.r}" y1="${y(v)}" y2="${y(v)}" stroke="#e5e7eb" stroke-width="1"/>
+        <text x="${P.l-6}" y="${y(v)+3}" font-size="10" fill="#6b7280" text-anchor="end">${Math.round(v)}</text>`).join("");
+      const dots=scores.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="3.2" fill="#1657c9"><title>${target[i].date} ${v}点 (${venueName(target[i].venueId)})</title></circle>`).join("");
+      trendEl.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+        ${grid}
+        <polyline points="${pts}" fill="none" stroke="#9db8e8" stroke-width="2"/>
+        <polyline points="${mPts}" fill="none" stroke="#ff6b1a" stroke-width="3.5" stroke-linejoin="round"/>
+        ${dots}${labels}
+      </svg>`;
+    }
+  }
+
+  // 会場別バーチャート
+  const vEl = $("#chart-venue");
+  if(vEl){
+    const byVenue={};
+    for(const g of target) (byVenue[g.venueId]=byVenue[g.venueId]||[]).push(g);
+    const rows=Object.entries(byVenue).map(([vid,gs])=>({name:venueName(vid), avg:gs.reduce((a,g)=>a+g.score,0)/gs.length, n:gs.length})).sort((a,b)=>b.avg-a.avg);
+    if(!rows.length){ vEl.innerHTML=`<div class="empty">データがありません。</div>`; }
+    else{
+      const W=600, rowH=34, H=rows.length*rowH+10, P={l:150,r:60,t:6};
+      const maxAvg=Math.max(...rows.map(r=>r.avg))*1.05;
+      const bars=rows.map((r,i)=>{
+        const y=P.t+i*rowH;
+        const bw=(W-P.l-P.r)*(r.avg/maxAvg);
+        return `<text x="${P.l-8}" y="${y+rowH/2+4}" font-size="12" fill="#111827" text-anchor="end">${esc(r.name.length>10?r.name.slice(0,10)+"…":r.name)}</text>
+        <rect x="${P.l}" y="${y+5}" width="${bw.toFixed(1)}" height="${rowH-12}" rx="6" fill="url(#vgrad)"/>
+        <text x="${P.l+bw+8}" y="${y+rowH/2+4}" font-size="12" font-weight="700" fill="#d97706">${fmt1(r.avg)} <tspan font-size="10" fill="#6b7280" font-weight="400">(${r.n}G)</tspan></text>`;
+      }).join("");
+      vEl.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+        <defs><linearGradient id="vgrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#d97706"/><stop offset="100%" stop-color="#f59e0b"/>
+        </linearGradient></defs>
+        ${bars}
+      </svg>`;
+    }
+  }
+}
+
+// ==================== かんり ====================
+function viewAdmin(){
+  const members = DB.data.members.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja"));
+  const venues = DB.data.venues.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja"));
+  return `
+  <div class="card">
+    <h2>👥 メンバー管理</h2>
+    <div class="row"><input type="text" id="a-member" placeholder="名前 (例: 山田)"><button class="btn sm" style="flex:0 0 90px" onclick="addMember()">追加</button></div>
+    <div class="small" style="margin-top:6px">※ 同名でも別メンバーとして追加できます。${Sync.mode==="cloud"?"☁️ 追加・変更は全員に共有されます。":""}</div>
+    <ul class="list" style="margin-top:8px">
+      ${members.length?members.map(m=>{
+        const n = allGames().filter(g=>g.memberId===m.id).length;
+        return `<li><div class="grow"><b>${esc(m.name)}</b> <span class="small">(${n}G)</span></div>
+          <button class="btn gray sm" onclick="renameMember('${m.id}')">改名</button>
+          <button class="btn danger sm" onclick="delMember('${m.id}')">削除</button></li>`;
+      }).join(""):`<div class="empty">まだメンバーがいません。</div>`}
+    </ul>
+  </div>
+  <div class="card">
+    <h2>📍 会場管理</h2>
+    <div class="row"><input type="text" id="a-venue" placeholder="会場名 (例: ○○ボウル)"><button class="btn sm" style="flex:0 0 90px" onclick="addVenue()">追加</button></div>
+    <ul class="list" style="margin-top:8px">
+      ${venues.length?venues.map(v=>{
+        const n = allGames().filter(g=>g.venueId===v.id).length;
+        return `<li><div class="grow"><b>${esc(v.name)}</b> <span class="small">(${n}G)</span></div>
+          <button class="btn gray sm" onclick="renameVenue('${v.id}')">改名</button>
+          <button class="btn danger sm" onclick="delVenue('${v.id}')">削除</button></li>`;
+      }).join(""):`<div class="empty">まだ会場がありません。記録時の「＋会場」からも追加できます。</div>`}
+    </ul>
+  </div>
+  <div class="card">
+    <h2>💾 データ</h2>
+    <div class="grid2">
+      <button class="btn ghost" onclick="exportJSON()">バックアップ(JSON)</button>
+      <button class="btn ghost" onclick="exportCSV()">CSV出力(Excel用)</button>
+    </div>
+    <div style="margin-top:8px"><button class="btn gray" onclick="document.getElementById('import-file').click()">バックアップから復元(追加)</button>
+    <input type="file" id="import-file" accept=".json" class="hidden" onchange="importJSON(event)"></div>
+    <div class="divider"></div>
+    <div class="grid2">
+      <button class="btn gray" onclick="loadSample()">サンプルデータを入れる</button>
+      <button class="btn danger" onclick="wipeAll()">全データを削除</button>
+    </div>
+    <div class="small" style="margin-top:8px">
+      ${Sync.mode==="cloud"
+        ? "☁️ クラウド共有モード: 記録はFirebase(Firestore)に保存され、全端末へリアルタイム反映されます。バックアップは定期的にどうぞ。"
+        : "📱 ローカルモード: データはこの端末のブラウザ内に保存されます。firebase-config.js を設定すると共有モードに切り替わります。"}
+    </div>
+  </div>`;
+}
+
+async function addMember(){
+  const name = $("#a-member").value.trim();
+  if(!name) return;
+  await fsAdd("members", {name, createdAt:Date.now()});
+  if(Sync.mode==="local") render(); else $("#a-member").value = "";
+}
+async function renameMember(id){
+  const m = DB.data.members.find(x=>x.id===id);
+  const name = prompt("新しい名前", m.name);
+  if(!name||!name.trim()) return;
+  await fsSet("members", id, {name:name.trim()});
+  render();
+}
+async function delMember(id){
+  const n = allGames().filter(g=>g.memberId===id).length;
+  if(!confirm(`このメンバーを削除しますか?${n?` (記録${n}Gは「削除済み」表示になります)`:""}`)) return;
+  await fsDel("members", id);
+  if(analysisMember===id) analysisMember="all";
+  render();
+}
+async function addVenue(){
+  const name = $("#a-venue").value.trim();
+  if(!name) return;
+  await fsAdd("venues", {name, createdAt:Date.now()});
+  if(Sync.mode==="local") render(); else $("#a-venue").value = "";
+}
+async function renameVenue(id){
+  const v = DB.data.venues.find(x=>x.id===id);
+  const name = prompt("新しい会場名", v.name);
+  if(!name||!name.trim()) return;
+  await fsSet("venues", id, {name:name.trim()});
+  render();
+}
+async function delVenue(id){
+  const n = allGames().filter(g=>g.venueId===id).length;
+  if(!confirm(`この会場を削除しますか?${n?` (記録${n}Gは「削除済み」表示になります)`:""}`)) return;
+  await fsDel("venues", id);
+  render();
+}
+
+// ---------- エクスポート / インポート ----------
+function downloadFile(name, content, type){
+  const blob = new Blob([content], {type});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+}
+function exportJSON(){
+  downloadFile(`bowling-practice-${todayStr()}.json`, JSON.stringify(DB.data,null,2), "application/json");
+}
+function exportCSV(){
+  const rows = [["日付","メンバー","会場","ゲーム","スコア","メモ"]];
+  const sessions = DB.data.sessions.slice().sort((a,b)=> a.date<b.date?-1:1);
+  for(const s of sessions){
+    (s.games||[]).forEach((g,i)=>{
+      if(g===null||g==="") return;
+      rows.push([s.date, memberName(s.memberId), venueName(s.venueId), i+1, g, (s.memo||"").replace(/"/g,'""')]);
+    });
+  }
+  const csv = "﻿" + rows.map(r=>r.map(c=>/[",\n]/.test(String(c))?`"${c}"`:c).join(",")).join("\n");
+  downloadFile(`bowling-practice-${todayStr()}.csv`, csv, "text/csv");
+}
+function importJSON(ev){
+  const f = ev.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload = async ()=>{
+    try{
+      const d = JSON.parse(r.result);
+      if(!d.members || !d.venues || !d.sessions) throw new Error("bad format");
+      if(!confirm(`バックアップの内容(${d.members.length}名・${d.venues.length}会場・${d.sessions.length}件)を追加します。よろしいですか?`)) return;
+      // id参照を保ったまま取り込む(クラウド時は新旧idを対応付け)
+      const items = [];
+      const memberMap = {}, venueMap = {};
+      for(const m of d.members){
+        const echo = {};
+        memberMap[m.id] = echo;
+        items.push({coll:"members", data:{name:m.name, createdAt:m.createdAt||Date.now()}, localEcho:echo});
+      }
+      for(const v of d.venues){
+        const echo = {};
+        venueMap[v.id] = echo;
+        items.push({coll:"venues", data:{name:v.name, createdAt:v.createdAt||Date.now()}, localEcho:echo});
+      }
+      await fsBatchAdd(items);
+      const sItems = d.sessions.map(s=>({coll:"sessions", data:{
+        date:s.date,
+        memberId: Sync.mode==="cloud" ? (memberMap[s.memberId]||{}).id : s.memberId,
+        venueId:  Sync.mode==="cloud" ? (venueMap[s.venueId]||{}).id : s.venueId,
+        games:s.games||[], memo:s.memo||"", createdAt:s.createdAt||Date.now()
+      }}));
+      await fsBatchAdd(sItems);
+      if(Sync.mode==="local"){ render(); }
+      alert("取り込みました");
+    }catch(e){ console.error(e); alert("読み込めませんでした。正しいバックアップファイルか確認してください。"); }
+  };
+  r.readAsText(f);
+}
+async function wipeAll(){
+  if(!confirm("全ての記録・メンバー・会場を削除します。本当によろしいですか?")) return;
+  if(!confirm(Sync.mode==="cloud" ? "クラウド上の共有データが全員分消えます。本当に削除します。" : "この操作は元に戻せません。本当に削除しますか?")) return;
+  if(Sync.mode==="cloud"){
+    for(const coll of ["members","venues","sessions"]){
+      const snap = await Sync.fs.getDocs(Sync.fs.collection(Sync.db, coll));
+      const docs = snap.docs;
+      for(let i=0;i<docs.length;i+=450){
+        const b = Sync.fs.writeBatch(Sync.db);
+        docs.slice(i,i+450).forEach(d=>b.delete(d.ref));
+        await b.commit();
+      }
+    }
+  }
+  DB.data = {members:[],venues:[],sessions:[]};
+  DB.save(); analysisMember="all"; render();
+}
+async function loadSample(){
+  if(DB.data.sessions.length && !confirm("既存の記録があります。サンプルデータを追加しますか?")) return;
+  const memEcho = [0,1,2,3].map(()=>({}));
+  const venEcho = [0,1,2].map(()=>({}));
+  const names = ["山田","田中","佐藤","鈴木"];
+  const venues = ["セントラルボウル","みなとレーン","グリーンアローボウル"];
+  const items = [];
+  names.forEach((n,i)=> items.push({coll:"members", data:{name:n, createdAt:Date.now()}, localEcho:memEcho[i]}));
+  venues.forEach((n,i)=> items.push({coll:"venues", data:{name:n, createdAt:Date.now()}, localEcho:venEcho[i]}));
+  await fsBatchAdd(items);
+  const memIds = Sync.mode==="cloud" ? memEcho.map(e=>e.id) : DB.data.members.slice(-4).map(m=>m.id);
+  const venIds = Sync.mode==="cloud" ? venEcho.map(e=>e.id) : DB.data.venues.slice(-3).map(v=>v.id);
+  const base = {0:150,1:135,2:120,3:165};
+  const vmod = {0:8, 1:-6, 2:0};
+  const rnd = seed => { let x=seed; return ()=>{ x=(x*1103515245+12345)&0x7fffffff; return x/0x7fffffff; }; };
+  const rand = rnd(42);
+  const today = new Date();
+  const sItems = [];
+  for(let w=10; w>=1; w--){
+    for(let mi=0; mi<4; mi++){
+      if(rand()<0.25) continue;
+      const d = new Date(today); d.setDate(d.getDate()-w*7+Math.floor(rand()*3));
+      const date = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+      const vi = Math.floor(rand()*3);
+      const growth = (10-w)*1.1;
+      const games = [];
+      const gN = 2+Math.floor(rand()*3);
+      for(let g=0; g<gN; g++){
+        const v = Math.round(base[mi] + vmod[vi] + growth + (rand()-0.5)*36 + g*3);
+        games.push(Math.max(60, Math.min(280, v)));
+      }
+      sItems.push({coll:"sessions", data:{date, memberId:memIds[mi], venueId:venIds[vi], games, memo:"", createdAt:d.getTime()+gN}});
+    }
+  }
+  await fsBatchAdd(sItems);
+  if(Sync.mode==="local") render();
+}
+
+// ---------- 起動 ----------
+render();
+initCloudSync();
+
+// PWA: Service Worker 登録
+if("serviceWorker" in navigator && location.protocol === "https:"){
+  navigator.serviceWorker.register("service-worker.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
