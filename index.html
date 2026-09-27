@@ -166,6 +166,7 @@
 <nav class="tabs" id="tabs">
   <button data-tab="home" class="on"><span class="ic">🏠</span>ホーム</button>
   <button data-tab="record"><span class="ic">📝</span>きろく</button>
+  <button data-tab="plans"><span class="ic">📅</span>よてい</button>
   <button data-tab="analysis"><span class="ic">📈</span>ぶんせき</button>
   <button data-tab="admin"><span class="ic">⚙️</span>かんり</button>
 </nav>
@@ -240,11 +241,11 @@ const todayStr = () => {
 // ---------- DB(表示用のローカルキャッシュ) ----------
 const DB = {
   key:"bowling_practice_v2",
-  data:{ members:[], venues:[], sessions:[] },
+  data:{ members:[], venues:[], sessions:[], plans:[] },
   load(){
     try{
       const raw = localStorage.getItem(this.key);
-      if(raw) this.data = Object.assign({members:[],venues:[],sessions:[]}, JSON.parse(raw));
+      if(raw) this.data = Object.assign({members:[],venues:[],sessions:[],plans:[]}, JSON.parse(raw));
     }catch(e){ console.warn(e); }
   },
   save(){ localStorage.setItem(this.key, JSON.stringify(this.data)); }
@@ -328,7 +329,7 @@ async function initCloudSync(){
     Sync.mode = "cloud"; Sync.db = db; Sync.fs = fsMod;
     if(el) el.textContent = "☁️ クラウド共有モード — みんなの記録がリアルタイムで集まります";
     // 3コレクションをリアルタイム購読
-    for(const coll of ["members","venues","sessions"]){
+    for(const coll of ["members","venues","sessions","plans"]){
       fsMod.onSnapshot(fsMod.collection(db, coll), snap=>{
         const rows = [];
         snap.forEach(d=> rows.push(Object.assign({id:d.id}, d.data())));
@@ -379,6 +380,7 @@ function render(){
   const app = $("#app");
   if(currentTab==="home") app.innerHTML = viewHome();
   else if(currentTab==="record"){ app.innerHTML = viewRecord(); initGameRows(); }
+  else if(currentTab==="plans"){ app.innerHTML = viewPlans(); }
   else if(currentTab==="analysis"){ app.innerHTML = viewAnalysis(); drawCharts(); }
   else if(currentTab==="admin") app.innerHTML = viewAdmin();
 }
@@ -449,9 +451,34 @@ function viewHome(){
     </ul>
   </div>`:""}
   ${couponAlertHtml()}
+  ${nextPlanHtml()}
   <div class="card">
     <h2>🕒 最近の記録</h2>
     ${recentHtml}
+  </div>`;
+}
+
+// 次の練習予定をホームに表示
+function nextPlanHtml(){
+  const today = todayStr();
+  const upcoming = DB.data.plans.filter(p=>p.date >= today)
+    .sort((a,b)=> (a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  if(!upcoming.length) return "";
+  const p = upcoming[0];
+  const venue = DB.data.venues.find(v=>v.id===p.venueId);
+  const going = Object.values(p.rsvps||{}).filter(x=>x==="going").length;
+  const days = Math.round((new Date(p.date) - new Date(today))/86400000);
+  const when = days===0? "今日!" : days===1? "明日" : `あと${days}日`;
+  return `<div class="card" style="border-left:5px solid var(--success)">
+    <h2 style="color:var(--success);border-left-color:var(--success)">📅 次の練習予定</h2>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <div>
+        <div style="font-weight:800;font-size:17px">${esc(p.date)}${p.time? " " + esc(p.time):""} <span class="tag hd" style="background:#e6f4ea;color:var(--success)">${when}</span></div>
+        <div class="small">📍 ${esc(venue?venue.name:"")}${p.memo? " ・ " + esc(p.memo):""}</div>
+        <div class="small">🙋 ${going}人が参加予定</div>
+      </div>
+      <button class="btn sm ghost" style="flex:0 0 auto" onclick="document.querySelector('[data-tab=plans]').click()">詳細</button>
+    </div>
   </div>`;
 }
 
@@ -921,6 +948,113 @@ async function delSession(id){
   render();
 }
 
+// ==================== よてい(練習予定) ====================
+// 端末ごとに「自分」を記憶(参加表明に使う)
+let myMemberId = localStorage.getItem("bowling_practice_me") || "";
+
+function viewPlans(){
+  const vOpts = DB.data.venues.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja"))
+    .map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join("");
+  const mOpts = DB.data.members.slice().sort((a,b)=>a.name.localeCompare(b.name,"ja"))
+    .map(m=>`<option value="${m.id}" ${m.id===myMemberId?"selected":""}>${esc(m.name)}</option>`).join("");
+
+  const today = todayStr();
+  const all = DB.data.plans.slice().sort((a,b)=> (a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+  const upcoming = all.filter(p=>p.date >= today);
+  const past = all.filter(p=>p.date < today).reverse();
+
+  return `
+  <div class="card">
+    <h2>📅 練習予定を立てる</h2>
+    ${DB.data.members.length===0||DB.data.venues.length===0?`<div class="empty" style="margin-bottom:10px">先に「⚙️ かんり」でメンバーと会場を登録してください。</div>`:""}
+    <div class="row" style="margin-bottom:8px">
+      <div><label>日付</label><input type="date" id="p-date" value="${today}"></div>
+      <div><label>時間(任意)</label><input type="time" id="p-time"></div>
+    </div>
+    <div style="margin-bottom:8px"><label>会場</label><select id="p-venue">${vOpts||'<option value="">(未登録)</option>'}</select></div>
+    <div style="margin-bottom:8px"><label>メモ(任意)</label><input type="text" id="p-memo" placeholder="例: 大会前の調整、初心者歓迎 など"></div>
+    <button class="btn accent" onclick="savePlan()" ${DB.data.venues.length===0?"disabled":""}>📅 この予定を追加</button>
+  </div>
+
+  <div class="card">
+    <h2>🙋 自分は誰?</h2>
+    <div class="small" style="margin-bottom:6px">参加表明に使います。この端末では次回から自動で選ばれます。</div>
+    <select id="p-me" onchange="setMe(this.value)">
+      <option value="">(選んでください)</option>
+      ${mOpts}
+    </select>
+  </div>
+
+  <div class="card">
+    <h2>📆 これからの予定 (${upcoming.length}件)</h2>
+    ${upcoming.length? upcoming.map(p=>planCardHtml(p)).join("") : `<div class="empty">まだ予定がありません。<br>上のフォームから練習予定を立てましょう!</div>`}
+  </div>
+
+  ${past.length?`<div class="card"><h2>🗂️ 過去の予定</h2>${past.slice(0,5).map(p=>planCardHtml(p,true)).join("")}</div>`:""}`;
+}
+
+function planCardHtml(p, isPast){
+  const r = p.rsvps || {};
+  const going  = Object.entries(r).filter(([k,v])=>v==="going").map(([k])=>memberName(k));
+  const maybe  = Object.entries(r).filter(([k,v])=>v==="maybe").map(([k])=>memberName(k));
+  const no     = Object.entries(r).filter(([k,v])=>v==="no").map(([k])=>memberName(k));
+  const mine = myMemberId && r[myMemberId];
+  const venue = DB.data.venues.find(v=>v.id===p.venueId);
+  return `<div class="venue-card" ${isPast?'style="opacity:.65"':""}>
+    <div class="head">
+      <div class="name">📅 ${esc(p.date)}${p.time? " " + esc(p.time):""}</div>
+      <button class="rm" onclick="delPlan('${p.id}')" style="border:none;background:#f3f4f6;color:var(--danger);border-radius:8px;width:30px;height:30px;cursor:pointer">✕</button>
+    </div>
+    <div class="small" style="margin:2px 0 6px">📍 ${esc(venue?venue.name:"(削除済み)")}${p.memo? " ・ " + esc(p.memo):""}</div>
+    ${venue && venue.price? `<div class="small">💴 ${esc(venue.price)}</div>`:""}
+    <div class="small" style="margin-top:6px">
+      🙋 行く(${going.length}): ${going.length? going.map(esc).join("・") : "まだいません"}<br>
+      ${maybe.length? `🤔 未定(${maybe.length}): ${maybe.map(esc).join("・")}<br>`:""}
+      ${no.length? `❌ 行かない(${no.length}): ${no.map(esc).join("・")}`:""}
+    </div>
+    ${!isPast && myMemberId? `
+    <div class="row" style="margin-top:8px;gap:6px">
+      <button class="btn sm ${mine==="going"?"":"ghost"}" style="flex:1;${mine==="going"?"background:var(--success)":""}" onclick="rsvp('${p.id}','going')">🙋 行く</button>
+      <button class="btn sm ${mine==="maybe"?"":"ghost"}" style="flex:1;${mine==="maybe"?"background:#f59e0b":""}" onclick="rsvp('${p.id}','maybe')">🤔 未定</button>
+      <button class="btn sm ${mine==="no"?"":"ghost"}" style="flex:1;${mine==="no"?"background:var(--danger)":""}" onclick="rsvp('${p.id}','no')">❌</button>
+    </div>`: !isPast? `<div class="small" style="margin-top:6px;color:var(--sub)">参加するには上で「自分は誰?」を選んでください</div>`:""}
+  </div>`;
+}
+
+function setMe(id){
+  myMemberId = id;
+  localStorage.setItem("bowling_practice_me", id);
+  render();
+}
+async function savePlan(){
+  const date = $("#p-date").value || todayStr();
+  const time = $("#p-time").value || "";
+  const venueId = $("#p-venue").value;
+  const memo = $("#p-memo").value.trim();
+  if(!venueId){ alert("会場を選択してください"); return; }
+  try{
+    await fsAdd("plans", {date, time, venueId, memo, rsvps:{}, createdAt:Date.now()});
+  }catch(e){
+    console.error(e); alert("保存に失敗しました: " + (e.code||e.message||e)); return;
+  }
+  if(Sync.mode==="local") render(); else $("#p-memo").value="";
+}
+async function rsvp(planId, status){
+  if(!myMemberId){ alert("先に「自分は誰?」を選んでください"); return; }
+  const p = DB.data.plans.find(x=>x.id===planId);
+  if(!p) return;
+  const rsvps = Object.assign({}, p.rsvps||{}, {[myMemberId]: status});
+  try{
+    await fsSet("plans", planId, {rsvps});
+  }catch(e){ console.error(e); alert("更新に失敗しました"); return; }
+  if(Sync.mode==="local") render();
+}
+async function delPlan(id){
+  if(!confirm("この予定を削除しますか?")) return;
+  await fsDel("plans", id);
+  render();
+}
+
 // ==================== ぶんせき ====================
 function viewAnalysis(){
   const games = allGames();
@@ -1367,7 +1501,7 @@ async function wipeAll(){
   if(!confirm("全ての記録・メンバー・会場を削除します。本当によろしいですか?")) return;
   if(!confirm(Sync.mode==="cloud" ? "クラウド上の共有データが全員分消えます。本当に削除します。" : "この操作は元に戻せません。本当に削除しますか?")) return;
   if(Sync.mode==="cloud"){
-    for(const coll of ["members","venues","sessions"]){
+    for(const coll of ["members","venues","sessions","plans"]){
       const snap = await Sync.fs.getDocs(Sync.fs.collection(Sync.db, coll));
       const docs = snap.docs;
       for(let i=0;i<docs.length;i+=450){
@@ -1377,7 +1511,7 @@ async function wipeAll(){
       }
     }
   }
-  DB.data = {members:[],venues:[],sessions:[]};
+  DB.data = {members:[],venues:[],sessions:[],plans:[]};
   DB.save(); analysisMember="all"; render();
 }
 async function loadSample(){
