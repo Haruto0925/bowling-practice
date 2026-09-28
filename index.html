@@ -105,6 +105,13 @@
   .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
   .chip{background:#eef2ff;color:var(--primary);border-radius:8px;padding:2px 8px;font-size:13px;font-weight:700;min-width:34px;text-align:center}
   .chip.best{background:#fff4e6;color:#c2410c}
+  .chip-tap{cursor:pointer;border-bottom:2px dashed var(--primary-2)}
+  /* フレーム内訳テーブル */
+  .frames-detail{margin-top:6px}
+  .frames-table-wrap{overflow-x:auto}
+  .frames-table{font-size:11px;border-collapse:collapse;background:#fff}
+  .frames-table th,.frames-table td{padding:3px 4px;min-width:22px;border:1px solid var(--border);text-align:center}
+  .frames-table th{background:var(--stripe);font-size:10px}
   /* 上達バッジ */
   .badge-up{display:inline-flex;align-items:center;gap:4px;background:#e6f4ea;color:var(--success);font-weight:800;border-radius:999px;padding:4px 12px;font-size:15px}
   .badge-down{display:inline-flex;align-items:center;gap:4px;background:#fce8e6;color:var(--danger);font-weight:800;border-radius:999px;padding:4px 12px;font-size:15px}
@@ -551,15 +558,60 @@ function viewRecord(){
     ${sessions.length? `<ul class="list">`+sessions.map(s=>{
       const gs = (s.games||[]).filter(g=>g!==null&&g!=="").map(Number);
       const a = gs.length? gs.reduce((x,y)=>x+y,0)/gs.length:0;
+      const hasDetail = s.gamesDetail && s.gamesDetail.length;
       return `<li>
         <div class="grow">
           <div><b>${esc(memberName(s.memberId))}</b> <span class="tag venue">📍${esc(venueName(s.venueId))}</span></div>
           <div class="small">${esc(s.date)} ・ ${gs.length}G ・ 平均 ${fmt1(a)}${s.memo? " ・ " + esc(s.memo):""}</div>
-          <div class="chips">${gs.map(g=>`<span class="chip">${g}</span>`).join("")}</div>
+          <div class="chips">${gs.map((g,gi)=>`<span class="chip${hasDetail?" chip-tap":""}" ${hasDetail?`onclick="toggleFrames('${s.id}',${gi})"`:""}>${g}</span>`).join("")}</div>
+          ${hasDetail? `<div class="small" style="margin-top:4px;color:var(--sub)">スコアをタップするとフレーム内訳が見れます</div>`:""}
+          <div class="frames-detail hidden" id="fd-${s.id}"></div>
         </div>
         <button class="btn danger sm" onclick="delSession('${s.id}')">削除</button>
       </li>`;
     }).join("")+`</ul>` : `<div class="empty">まだ記録がありません。</div>`}
+  </div>`;
+}
+
+// フレーム内訳の表示/非表示(記録一覧)
+let openDetail = {sid:null, gi:null};
+function toggleFrames(sid, gi){
+  const box = document.getElementById("fd-"+sid);
+  if(!box) return;
+  if(openDetail.sid===sid && openDetail.gi===gi && !box.classList.contains("hidden")){
+    box.classList.add("hidden"); openDetail={sid:null,gi:null}; return;
+  }
+  const s = DB.data.sessions.find(x=>x.id===sid);
+  const d = s && s.gamesDetail && s.gamesDetail[gi];
+  if(!d){ return; }
+  openDetail = {sid, gi};
+  document.querySelectorAll(".frames-detail").forEach(x=>x.classList.add("hidden"));
+  box.innerHTML = framesDetailHtml(d, gi);
+  box.classList.remove("hidden");
+}
+
+// framesStr("10,-,-|9,0|...") をパースして内訳テーブルを作る
+function framesDetailHtml(d, gi){
+  const frames = (d.framesStr||"").split("|").map(fs=> fs.split(",").map(p=> p==="-"? null : Number(p)));
+  const calc = calcGame(frames);
+  const hdr = frames.map((_,i)=>`<th>${i+1}</th>`).join("");
+  const marksRow = frames.map((fr,i)=>{
+    return `<td style="font-weight:700;color:var(--primary)">${frameMark(fr,i)||"‐"}</td>`;
+  }).join("");
+  const pinsRow = frames.map((fr,i)=>{
+    const ps = fr.map(p=>p===null?"":p).filter(p=>p!=="");
+    return `<td>${ps.join("・")||"‐"}</td>`;
+  }).join("");
+  const cumRow = calc.cum.map(c=>`<td class="small">${c===null?"":c}</td>`).join("");
+  return `<div class="frames-table-wrap">
+    <div class="small" style="margin:6px 0 4px"><b>${gi+1}ゲーム目</b> — ${d.score}点 (X${d.strikes} /${d.spares} O${d.opens})</div>
+    <table class="frames-table">
+      <tr>${hdr}</tr>
+      <tr title="倒したピン数">${pinsRow}</tr>
+      <tr title="マーク">${marksRow}</tr>
+      <tr title="累積スコア">${cumRow}</tr>
+    </table>
+    <div class="small" style="margin-top:4px">上から: 倒した数 / マーク / 累積スコア</div>
   </div>`;
 }
 
